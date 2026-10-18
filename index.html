@@ -327,6 +327,8 @@ function openMonitor(id) {
     const hasAvg = m.average !== '' && m.average != null;
     body += `<div class="block steps"><h3>Finish test</h3>
       <div class="step ${hasAvg?'done':''}"><div>
+        <label class="f" for="pickBy">Picked up by</label>
+        <select class="in" id="pickBy" style="margin-bottom:6px">${peopleOpts(state.me || m.location, false)}</select>
         <label class="f" for="avgIn">Average (pCi/L)</label>
         <div class="row"><input class="in" id="avgIn" type="number" inputmode="decimal" step="0.1" min="0" value="${esc(m.average)}" placeholder="e.g. 2.3">
         <button class="btn primary" style="flex:0 0 auto" data-act="avg">Save</button></div>
@@ -405,7 +407,7 @@ async function act(el) {
   if (a === 'avg') {
     const v = $('#avgIn').value;
     if (v === '' || isNaN(parseFloat(v))) return toast('Enter the average', true);
-    return run('Saving…', 'average', { average: v }, true);
+    return run('Saving…', 'average', { average: v, person: $('#pickBy').value }, true);
   }
   if (a === 'report') {
     const res = await run('Building PDF…', 'report', {});
@@ -541,7 +543,7 @@ function demoApi(action, d) {
     switch (action) {
       case 'list': return resolve({ ok:true, monitors: JSON.parse(JSON.stringify(demoDB.mons)), people: demoDB.people, failLevel: 4 });
       case 'deploy': { const n = new Date(); const e = new Date(n.getTime()+2*DAY); Object.assign(m, { status:'Deployed', address:d.address, location:d.person, startDate:fmt(n), dropTime:'10:00 AM', endDate:fmt(e), pickTime:'10:00 AM' }); stamp(); break; }
-      case 'average': m.average = String(parseFloat(d.average)); m.result = parseFloat(d.average) >= 4 ? 'Fail' : 'Pass'; stamp(); break;
+      case 'average': if (d.person) m.location = d.person; m.average = String(parseFloat(d.average)); m.result = parseFloat(d.average) >= 4 ? 'Fail' : 'Pass'; stamp(); break;
       case 'finish': Object.assign(m, { status:'Vehicle', address:'', startDate:'', dropTime:'', endDate:'', pickTime:'', average:'', result:'' }); stamp(); break;
       case 'transfer': m.location = d.person; if (d.person==='Closet') m.status='Office'; else if (m.status==='Office') m.status='Vehicle'; stamp(); break;
       case 'status': m.status = d.status; if (d.status==='Office') m.location='Closet'; if (d.note !== undefined) m.notes = d.note; stamp(); break;
