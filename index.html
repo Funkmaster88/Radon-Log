@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Radon Log">
+<meta name="theme-color" content="#24396b">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
+<link rel="manifest" href="manifest.json">
+<title>Radon Log</title>
+<style>
+:root{
+  --navy:#24396b; --navy-2:#1b2c54; --green:#6cb33f; --green-d:#4f8f27;
+  --bg:#f3f5f9; --card:#fff; --ink:#1a2233; --muted:#667085; --line:#e3e7ef;
+  --deployed:#2f6fd6; --vehicle:#6cb33f; --office:#8a94a6; --missing:#d64545; --calibration:#9b5de5;
+  --warn:#e8a317; --danger:#d64545; --radius:14px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+.hidden{display:none!important}
+
+/* Header */
+header{position:sticky;top:0;z-index:20;background:var(--navy);color:#fff;padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;display:flex;align-items:center;gap:12px}
+header h1{font-size:20px;margin:0;flex:1;font-weight:700;letter-spacing:.2px}
+header h1 small{display:block;font-size:12px;font-weight:500;opacity:.75}
+.hbtn{background:rgba(255,255,255,.14);border:0;color:#fff;border-radius:10px;padding:8px 12px;font-weight:600;cursor:pointer}
+.hbtn:active{background:rgba(255,255,255,.28)}
+.spin{display:inline-block;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+main{max-width:1200px;margin:0 auto;padding:14px 16px calc(40px + env(safe-area-inset-bottom))}
+
+/* Summary */
+.summary{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px}
+.stat{background:var(--card);border-radius:var(--radius);padding:10px 12px;border:1px solid var(--line);cursor:pointer;text-align:left}
+.stat b{display:block;font-size:24px;line-height:1.1}
+.stat span{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.stat.on{outline:3px solid var(--navy)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
+.alerts{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.alert{border:0;border-radius:999px;padding:7px 13px;font-size:14px;font-weight:600;cursor:pointer}
+.alert.danger{background:#fde8e8;color:#a32020}
+.alert.warn{background:#fdf3dc;color:#8a5a00}
+.alert.on{outline:2px solid currentColor}
+
+/* Filters */
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center}
+.seg{display:flex;background:#e4e8f0;border-radius:10px;padding:3px}
+.seg button{border:0;background:none;padding:7px 14px;border-radius:8px;font-weight:600;color:var(--muted);cursor:pointer}
+.seg button.on{background:#fff;color:var(--navy);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.filters select,.filters input{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 10px;min-height:40px}
+.filters input{flex:1;min-width:160px}
+
+/* Cards */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.card{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--office);border-radius:var(--radius);padding:12px 14px;cursor:pointer;text-align:left;width:100%;display:block}
+.card:active{transform:scale(.99)}
+.card .top{display:flex;align-items:center;gap:8px}
+.card .num{font-size:22px;font-weight:800;min-width:44px}
+.badge{font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;color:#fff;text-transform:uppercase;letter-spacing:.4px}
+.card .who{margin-left:auto;font-size:14px;font-weight:600;color:var(--navy);text-align:right}
+.card .addr{font-size:14px;margin-top:6px;color:var(--ink);min-height:1em}
+.card .meta{font-size:13px;color:var(--muted);margin-top:4px;display:flex;flex-wrap:wrap;gap:4px 10px}
+.flag{font-weight:700}
+.flag.danger{color:var(--danger)} .flag.warn{color:#b27800}
+.empty{color:var(--muted);text-align:center;padding:40px}
+.section-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:18px 0 8px}
+
+/* Sheet / modal */
+.backdrop{position:fixed;inset:0;background:rgba(15,22,40,.45);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+@media(min-width:700px){.backdrop{align-items:center}}
+.sheet{background:#fff;width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:18px 18px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom))}
+@media(min-width:700px){.sheet{border-radius:18px}}
+.sheet h2{margin:0 0 2px;font-size:22px;display:flex;align-items:center;gap:10px}
+.sheet .sub{color:var(--muted);font-size:14px;margin-bottom:12px}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:4px 10px;font-size:15px;background:var(--bg);border-radius:12px;padding:10px 12px;margin-bottom:14px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-weight:600;word-break:break-word}
+.block{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+.block h3{margin:0 0 8px;font-size:15px}
+label.f{display:block;font-size:13px;color:var(--muted);margin:8px 0 4px;font-weight:600}
+.in{width:100%;border:1px solid #cfd5e1;border-radius:10px;padding:11px 12px;font-size:17px;background:#fff}
+.in:focus{outline:2px solid var(--navy);border-color:transparent}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row>*{flex:1}
+.btn{border:0;border-radius:12px;padding:13px 16px;font-weight:700;font-size:16px;cursor:pointer;background:#e8ecf3;color:var(--navy);min-height:48px}
+.btn.primary{background:var(--navy);color:#fff}
+.btn.green{background:var(--green);color:#fff}
+.btn.danger{background:#fde8e8;color:#a32020}
+.btn:disabled{opacity:.45}
+.btn:active:not(:disabled){filter:brightness(.92)}
+.steps{counter-reset:s}
+.step{display:flex;gap:10px;align-items:flex-start;margin:10px 0}
+.step::before{counter-increment:s;content:counter(s);flex:none;width:26px;height:26px;border-radius:50%;background:var(--navy);color:#fff;font-weight:700;display:grid;place-items:center;font-size:14px;margin-top:10px}
+.step.done::before{content:"✓";background:var(--green)}
+.step>div{flex:1}
+.result{font-size:20px;font-weight:800;margin:6px 0 2px}
+.result.pass{color:var(--green-d)} .result.fail{color:var(--danger)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 14px;font-weight:600;cursor:pointer}
+.close{margin-left:auto;border:0;background:#eef1f6;border-radius:50%;width:36px;height:36px;font-size:20px;cursor:pointer;color:var(--muted)}
+
+/* Login */
+.login{max-width:420px;margin:8vh auto;background:#fff;border-radius:18px;padding:24px;border:1px solid var(--line)}
+.login h2{margin:0 0 4px;color:var(--navy)}
+.login p{color:var(--muted);margin:0 0 14px}
+
+/* Toast */
+#toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(120px);background:var(--ink);color:#fff;padding:12px 18px;border-radius:12px;font-weight:600;z-index:80;transition:transform .25s;max-width:90vw}
+#toast.show{transform:translateX(-50%) translateY(0)}
+#toast.err{background:var(--danger)}
+.demo{background:var(--warn);color:#000;text-align:center;font-size:13px;font-weight:700;padding:4px}
+
+@media(max-width:640px){.summary{grid-template-columns:repeat(3,1fr)}.stat b{font-size:20px}}
+</style>
+</head>
+<body>
+<div id="demoBar" class="demo hidden">DEMO MODE — sample data, nothing is saved</div>
+<header>
+  <h1>Radon Log<small id="hdrSub">Pillar To Post · Alliance Team</small></h1>
+  <button class="hbtn hidden" id="meBtn"></button>
+  <button class="hbtn hidden" id="refreshBtn" aria-label="Refresh"><span id="refreshIcon">↻</span></button>
+</header>
+
+<main>
+  <!-- Login -->
+  <section id="login" class="login hidden">
+    <h2>Sign in</h2>
+    <p>Enter the team passcode, then pick your name.</p>
+    <label class="f" for="passIn">Team passcode</label>
+    <input class="in" id="passIn" type="password" autocomplete="current-password">
+    <div id="nameWrap" class="hidden">
+      <label class="f" for="nameIn">Your name</label>
+      <select class="in" id="nameIn"></select>
+    </div>
+    <div style="height:14px"></div>
+    <button class="btn primary" style="width:100%" id="loginBtn">Continue</button>
+  </section>
+
+  <!-- Board -->
+  <section id="board" class="hidden">
+    <div class="summary" id="summary"></div>
+    <div class="alerts" id="alerts"></div>
+    <div class="filters">
+      <div class="seg" id="scopeSeg">
+        <button data-v="all" class="on">All</button>
+        <button data-v="mine">Mine</button>
+      </div>
+      <div class="seg" id="deptSeg">
+        <button data-v="all" class="on">All depts</button>
+        <button data-v="stl">STL</button>
+        <button data-v="cape">Cape (S)</button>
+      </div>
+      <select id="personSel" aria-label="Person"></select>
+      <input id="searchIn" type="search" placeholder="Search # or address" aria-label="Search">
+    </div>
+    <div id="list"></div>
+  </section>
+</main>
+
+<div id="modal" class="backdrop hidden"><div class="sheet" id="sheet"></div></div>
+<div id="toast"></div>
+
+<script>
+/* ============ CONFIG ============ */
+// Paste your Apps Script web app URL here (ends in /exec)
+const API_URL = 'https://script.google.com/macros/s/AKfycbzUYQSwJc5c07WABx_83H0874lCLJ-SMU4zCQgsZyoow2p1qD-sByeY11W85bq_DZpCeQ/exec';
+/* ================================ */
+
+const DEMO = !API_URL || new URLSearchParams(location.search).has('demo');
+const LS = {
+  get(k){ try{ return localStorage.getItem('radon_'+k) }catch(e){ return null } },
+  set(k,v){ try{ localStorage.setItem('radon_'+k,v) }catch(e){} },
+  del(k){ try{ localStorage.removeItem('radon_'+k) }catch(e){} }
+};
+const state = {
+  key: LS.get('key') || '', me: LS.get('me') || '',
+  monitors: [], people: [], failLevel: 4,
+  filter: { scope: 'all', dept: 'all', person: '', status: '', alert: '', q: '' },
+  pdf: null
+};
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const STATUS_COLOR = { Deployed:'var(--deployed)', Vehicle:'var(--vehicle)', Office:'var(--office)', Missing:'var(--missing)', Calibration:'var(--calibration)' };
+const STATUS_ORDER = ['Deployed','Vehicle','Office','Missing','Calibration'];
+
+/* ============ API ============ */
+async function api(action, data = {}) {
+  if (DEMO) return demoApi(action, data);
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ ...data, action, key: state.key, by: state.me })
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'Something went wrong');
+  return json;
+}
+
+let toastTimer;
+function toast(msg, err) {
+  const t = $('#toast');
+  t.textContent = msg; t.classList.toggle('err', !!err); t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), err ? 4500 : 1800);
+}
+
+/* ============ DATES ============ */
+function parseDT(d, t) {
+  if (!d) return null;
+  const m = String(d).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (!m) return null;
+  let y = +m[3]; if (y < 100) y += 2000;
+  let h = 0, min = 0;
+  const tm = String(t || '').match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (tm) { h = +tm[1]; min = +tm[2]; const ap = (tm[3]||'').toUpperCase(); if (ap === 'PM' && h < 12) h += 12; if (ap === 'AM' && h === 12) h = 0; }
+  return new Date(y, +m[1]-1, +m[2], h, min);
+}
+const DAY = 864e5;
+function flags(m) {
+  const out = [];
+  const now = new Date();
+  if (m.status === 'Deployed') {
+    const due = parseDT(m.endDate, m.pickTime);
+    if (due && now > due) out.push({ k:'overdue', cls:'danger', txt:'Pickup overdue' });
+    else if (due && due - now < DAY && due.toDateString() === now.toDateString()) out.push({ k:'today', cls:'warn', txt:'Pickup today' });
+  }
+  const cal = parseDT(m.calDate);
+  if (cal) {
+    const days = Math.ceil((cal - now) / DAY);
+    if (days < 0) out.push({ k:'calover', cls:'danger', txt:'Calibration overdue' });
+    else if (days <= 30) out.push({ k:'calsoon', cls:'warn', txt: days === 0 ? 'Cal due today' : `Cal due in ${days}d` });
+  }
+  return out;
+}
+const isCape = m => /^S/i.test(m.id);
+function fmtShort(d, t) { const x = parseDT(d, t); if (!x) return ''; return x.toLocaleDateString([], { weekday:'short', month:'numeric', day:'numeric' }) + (t ? ' ' + t : ''); }
+
+/* ============ RENDER BOARD ============ */
+function filtered() {
+  const f = state.filter, q = f.q.trim().toLowerCase();
+  return state.monitors.filter(m => {
+    if (f.scope === 'mine' && m.location !== state.me) return false;
+    if (f.dept === 'cape' && !isCape(m)) return false;
+    if (f.dept === 'stl' && isCape(m)) return false;
+    if (f.person && m.location !== f.person) return false;
+    if (f.status && m.status !== f.status) return false;
+    if (f.alert && !flags(m).some(x => x.k === f.alert || (f.alert === 'cal' && (x.k === 'calover' || x.k === 'calsoon')))) return false;
+    if (q && !(String(m.id).toLowerCase() === q || String(m.id).toLowerCase() === q.replace('#','') || m.address.toLowerCase().includes(q) || m.location.toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
+
+function renderBoard() {
+  const all = state.monitors;
+  // summary
+  $('#summary').innerHTML = STATUS_ORDER.map(s => {
+    const n = all.filter(m => m.status === s).length;
+    return `<button class="stat ${state.filter.status === s ? 'on' : ''}" data-status="${s}"><b>${n}</b><span><i class="dot" style="background:${STATUS_COLOR[s]}"></i>${s}</span></button>`;
+  }).join('');
+  // alerts
+  const cnt = k => all.filter(m => flags(m).some(x => k === 'cal' ? (x.k === 'calover' || x.k === 'calsoon') : x.k === k)).length;
+  const a = [];
+  const o = cnt('overdue'), t = cnt('today'), c = cnt('cal');
+  if (o) a.push(`<button class="alert danger ${state.filter.alert==='overdue'?'on':''}" data-alert="overdue">⚠ ${o} pickup${o>1?'s':''} overdue</button>`);
+  if (t) a.push(`<button class="alert warn ${state.filter.alert==='today'?'on':''}" data-alert="today">${t} pickup${t>1?'s':''} today</button>`);
+  if (c) a.push(`<button class="alert warn ${state.filter.alert==='cal'?'on':''}" data-alert="cal">${c} calibration${c>1?'s':''} due ≤30 days</button>`);
+  $('#alerts').innerHTML = a.join('');
+  $('#alerts').classList.toggle('hidden', !a.length);
+
+  // people select
+  const ps = $('#personSel'), cur = state.filter.person;
+  ps.innerHTML = `<option value="">Everyone</option>` + state.people.map(p => `<option ${p===cur?'selected':''}>${esc(p)}</option>`).join('');
+
+  const list = filtered();
+  if (!list.length) { $('#list').innerHTML = `<div class="empty">No monitors match these filters.</div>`; return; }
+  // group: deployed first, then the rest
+  const groups = STATUS_ORDER.map(s => [s, list.filter(m => m.status === s)]).filter(g => g[1].length);
+  const other = list.filter(m => !STATUS_ORDER.includes(m.status));
+  if (other.length) groups.push(['Other', other]);
+  $('#list').innerHTML = groups.map(([s, ms]) =>
+    `<div class="section-title">${esc(s)} · ${ms.length}</div><div class="grid">${ms.map(card).join('')}</div>`
+  ).join('');
+}
+
+function card(m) {
+  const color = STATUS_COLOR[m.status] || 'var(--office)';
+  const fl = flags(m);
+  let meta = [];
+  if (m.status === 'Deployed') {
+    if (m.endDate) meta.push(`Pickup ${esc(fmtShort(m.endDate, m.pickTime))}`);
+    if (m.average) meta.push(`Avg <b>${esc(m.average)}</b> ${esc(m.result)}`);
+  }
+  fl.forEach(f => meta.push(`<span class="flag ${f.cls}">${esc(f.txt)}</span>`));
+  if (m.notes) meta.push(`📝 ${esc(m.notes)}`);
+  return `<button class="card" data-id="${esc(m.id)}" style="border-left-color:${color}">
+    <div class="top"><span class="num">${esc(m.id)}</span>
+      <span class="badge" style="background:${color}">${esc(m.status || '—')}</span>
+      <span class="who">${esc(m.location || '')}</span></div>
+    ${m.status === 'Deployed' ? `<div class="addr">${esc(m.address)}</div>` : ''}
+    <div class="meta">${meta.join(' ')}</div>
+  </button>`;
+}
+
+/* ============ DETAIL SHEET ============ */
+function openMonitor(id) {
+  const m = state.monitors.find(x => x.id === id);
+  if (!m) return;
+  state.pdf = null;
+  const color = STATUS_COLOR[m.status] || 'var(--office)';
+  const peopleOpts = (sel, includeCloset = true) => state.people.filter(p => includeCloset || p !== 'Closet').map(p => `<option ${p===sel?'selected':''}>${esc(p)}</option>`).join('');
+  const kv = [
+    ['Status', m.status], ['With', m.location],
+    m.address && ['Address', m.address],
+    m.startDate && ['Dropped off', `${m.startDate} ${m.dropTime}`],
+    m.endDate && ['Pickup', `${m.endDate} ${m.pickTime}`],
+    m.calDate && ['Calibration due', m.calDate],
+    m.notes && ['Notes', m.notes],
+    m.timestamp && ['Last change', m.timestamp]
+  ].filter(Boolean).map(([k,v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('');
+
+  let body = '';
+  if (m.status === 'Deployed') {
+    const hasAvg = m.average !== '' && m.average != null;
+    body += `<div class="block steps"><h3>Finish test</h3>
+      <div class="step ${hasAvg?'done':''}"><div>
+        <label class="f" for="avgIn">Average (pCi/L)</label>
+        <div class="row"><input class="in" id="avgIn" type="number" inputmode="decimal" step="0.1" min="0" value="${esc(m.average)}" placeholder="e.g. 2.3">
+        <button class="btn primary" style="flex:0 0 auto" data-act="avg">Save</button></div>
+        <div id="resPreview">${resultHtml(m.average)}</div>
+      </div></div>
+      <div class="step"><div>
+        <label class="f">Report</label>
+        <div class="row" id="pdfRow"><button class="btn" data-act="report" ${hasAvg?'':'disabled'}>📄 Prepare report PDF</button></div>
+      </div></div>
+      <div class="step"><div>
+        <label class="f">Finish &amp; clear (saves to Backup, row resets to Vehicle)</label>
+        <button class="btn green" style="width:100%" data-act="finish" ${hasAvg?'':'disabled'}>Finish &amp; Clear</button>
+      </div></div>
+    </div>
+    <div class="block"><h3>Edit address</h3>
+      <div class="row"><input class="in" id="addrEdit" value="${esc(m.address)}">
+      <button class="btn" style="flex:0 0 auto" data-act="editaddr">Save</button></div>
+    </div>`;
+  } else {
+    body += `<div class="block"><h3>Deploy this monitor</h3>
+      <label class="f" for="addrIn">Property address</label>
+      <input class="in" id="addrIn" placeholder="123 Main St, St. Louis, MO 63126" autocomplete="street-address">
+      <label class="f" for="depBy">Deployed by</label>
+      <select class="in" id="depBy">${peopleOpts(state.me || m.location, false)}</select>
+      <div style="height:10px"></div>
+      <button class="btn primary" style="width:100%" data-act="deploy">Deploy</button>
+    </div>`;
+  }
+  body += `<div class="block"><h3>Hand off / move</h3>
+      <div class="row"><select class="in" id="xferTo">${peopleOpts(m.location === state.me ? '' : state.me)}</select>
+      <button class="btn" style="flex:0 0 auto" data-act="transfer">Move</button></div>
+    </div>`;
+  if (m.status !== 'Deployed') {
+    body += `<div class="block"><h3>Set status</h3><div class="chips">
+      ${['Vehicle','Office','Missing','Calibration'].filter(s => s !== m.status).map(s => `<button class="chip" data-act="status" data-v="${s}"><i class="dot" style="background:${STATUS_COLOR[s]}"></i> ${s}</button>`).join('')}
+      </div>
+      <label class="f" for="noteIn">Note (optional)</label>
+      <input class="in" id="noteIn" value="${esc(m.notes)}" placeholder="e.g. Wrong power cord">
+    </div>`;
+  }
+  $('#sheet').innerHTML = `<h2>Monitor ${esc(m.id)} <span class="badge" style="background:${color}">${esc(m.status)}</span><button class="close" data-act="close" aria-label="Close">×</button></h2>
+    <div class="sub">${isCape(m) ? 'Cape department' : 'St. Louis'}</div>
+    <dl class="kv">${kv}</dl>${body}`;
+  $('#modal').classList.remove('hidden');
+  $('#sheet').dataset.id = id;
+  const avgIn = $('#avgIn');
+  if (avgIn) avgIn.addEventListener('input', () => $('#resPreview').innerHTML = resultHtml(avgIn.value));
+}
+
+function resultHtml(v) {
+  if (v === '' || v == null || isNaN(parseFloat(v))) return '';
+  const fail = parseFloat(v) >= state.failLevel;
+  return `<div class="result ${fail?'fail':'pass'}">${fail ? 'FAIL' : 'PASS'}</div><div style="font-size:13px;color:var(--muted)">${fail ? 'At or above' : 'Below'} ${state.failLevel} pCi/L</div>`;
+}
+
+function closeModal() { $('#modal').classList.add('hidden'); if (state.pdf) URL.revokeObjectURL(state.pdf.url); state.pdf = null; }
+
+async function act(el) {
+  const a = el.dataset.act, id = $('#sheet').dataset.id;
+  if (a === 'close') return closeModal();
+  if (a === 'sharepdf') return sharePdf();
+  const run = async (label, action, data, keepOpen) => {
+    const old = el.innerHTML; el.disabled = true; el.innerHTML = `<span class="spin">↻</span> ${label}`;
+    try {
+      const res = await api(action, { monitor: id, ...data });
+      if (action !== 'report') { await load(true); toast('Saved'); }
+      if (keepOpen) openMonitor(id); else if (action !== 'report') closeModal();
+      return res;
+    } catch (e) { toast(e.message, true); el.disabled = false; el.innerHTML = old; }
+  };
+  if (a === 'deploy') {
+    const address = $('#addrIn').value.trim();
+    if (!address) return toast('Enter the address', true);
+    return run('Deploying…', 'deploy', { address, person: $('#depBy').value });
+  }
+  if (a === 'avg') {
+    const v = $('#avgIn').value;
+    if (v === '' || isNaN(parseFloat(v))) return toast('Enter the average', true);
+    return run('Saving…', 'average', { average: v }, true);
+  }
+  if (a === 'report') {
+    const res = await run('Building PDF…', 'report', {});
+    if (!res) return;
+    const bytes = Uint8Array.from(atob(res.pdf), c => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    state.pdf = { blob, url: URL.createObjectURL(blob), name: res.filename || `Radon Monitor ${id}.pdf` };
+    const canShare = navigator.canShare && navigator.canShare({ files: [new File([blob], state.pdf.name, { type: 'application/pdf' })] });
+    $('#pdfRow').innerHTML = (canShare ? `<button class="btn primary" data-act="sharepdf">Share / Save PDF</button>` : '') +
+      `<a class="btn" style="text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center" href="${state.pdf.url}" target="_blank" download="${esc(state.pdf.name)}">Open PDF</a>`;
+    el.closest('.step').classList.add('done');
+    return;
+  }
+  if (a === 'finish') {
+    const m = state.monitors.find(x => x.id === id);
+    if (!confirm(`Finish monitor ${id}?\n\n${m.address}\nAverage ${m.average} — ${m.result}\n\nThis saves to Backup and clears the row. Make sure the report is saved first.`)) return;
+    return run('Finishing…', 'finish', {});
+  }
+  if (a === 'editaddr') return run('Saving…', 'edit', { address: $('#addrEdit').value }, true);
+  if (a === 'transfer') return run('Moving…', 'transfer', { person: $('#xferTo').value });
+  if (a === 'status') return run('Saving…', 'status', { status: el.dataset.v, note: $('#noteIn') ? $('#noteIn').value : undefined });
+}
+
+async function sharePdf() {
+  if (!state.pdf) return;
+  try { await navigator.share({ files: [new File([state.pdf.blob], state.pdf.name, { type: 'application/pdf' })], title: state.pdf.name }); }
+  catch (e) { if (e.name !== 'AbortError') toast('Could not share — use Open PDF', true); }
+}
+
+/* ============ LOAD / LOGIN ============ */
+let loading = false;
+async function load(silent) {
+  if (loading) return; loading = true;
+  $('#refreshIcon').classList.add('spin');
+  try {
+    const res = await api('list');
+    state.monitors = res.monitors; state.people = res.people; state.failLevel = res.failLevel || 4;
+    renderBoard();
+    $('#hdrSub').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+    return true;
+  } catch (e) {
+    if (/passcode/i.test(e.message)) { LS.del('key'); state.key = ''; showLogin(); }
+    toast(e.message, true);
+    return false;
+  } finally { loading = false; $('#refreshIcon').classList.remove('spin'); }
+}
+
+function showLogin() {
+  $('#login').classList.remove('hidden'); $('#board').classList.add('hidden');
+  $('#meBtn').classList.add('hidden'); $('#refreshBtn').classList.add('hidden');
+  $('#nameWrap').classList.add('hidden'); $('#passIn').value = '';
+}
+function showBoard() {
+  $('#login').classList.add('hidden'); $('#board').classList.remove('hidden');
+  $('#meBtn').classList.remove('hidden'); $('#refreshBtn').classList.remove('hidden');
+  $('#meBtn').textContent = state.me || 'Pick name';
+}
+
+$('#loginBtn').onclick = async () => {
+  const btn = $('#loginBtn');
+  if ($('#nameWrap').classList.contains('hidden')) {
+    state.key = $('#passIn').value.trim();
+    if (!state.key && !DEMO) return toast('Enter the passcode', true);
+    btn.disabled = true; btn.textContent = 'Checking…';
+    const ok = await load();
+    btn.disabled = false; btn.textContent = 'Continue';
+    if (!ok) return;
+    LS.set('key', state.key);
+    $('#nameIn').innerHTML = state.people.filter(p => p !== 'Closet').map(p => `<option ${p===state.me?'selected':''}>${esc(p)}</option>`).join('');
+    $('#nameWrap').classList.remove('hidden');
+    $('#passIn').closest('section').querySelector('p').textContent = 'Pick your name so "Mine" shows your monitors.';
+  } else {
+    state.me = $('#nameIn').value; LS.set('me', state.me);
+    showBoard(); renderBoard();
+  }
+};
+$('#passIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('#loginBtn').click(); });
+
+$('#meBtn').onclick = () => {
+  $('#sheet').dataset.id = '';
+  $('#sheet').innerHTML = `<h2>You're signed in<button class="close" data-act="close">×</button></h2>
+    <label class="f" for="meSel">Your name</label>
+    <select class="in" id="meSel">${state.people.filter(p=>p!=='Closet').map(p=>`<option ${p===state.me?'selected':''}>${esc(p)}</option>`).join('')}</select>
+    <div style="height:12px"></div>
+    <div class="row"><button class="btn primary" id="meSave">Save</button><button class="btn danger" id="signOut">Sign out</button></div>`;
+  $('#modal').classList.remove('hidden');
+  $('#meSave').onclick = () => { state.me = $('#meSel').value; LS.set('me', state.me); $('#meBtn').textContent = state.me; closeModal(); renderBoard(); };
+  $('#signOut').onclick = () => { LS.del('key'); LS.del('me'); state.key = ''; state.me = ''; closeModal(); showLogin(); };
+};
+
+/* ============ EVENTS ============ */
+$('#refreshBtn').onclick = () => load();
+$('#list').addEventListener('click', e => { const c = e.target.closest('.card'); if (c) openMonitor(c.dataset.id); });
+$('#summary').addEventListener('click', e => { const s = e.target.closest('.stat'); if (!s) return; state.filter.status = state.filter.status === s.dataset.status ? '' : s.dataset.status; renderBoard(); });
+$('#alerts').addEventListener('click', e => { const s = e.target.closest('.alert'); if (!s) return; state.filter.alert = state.filter.alert === s.dataset.alert ? '' : s.dataset.alert; renderBoard(); });
+function seg(id, key) { $(id).addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; state.filter[key] = b.dataset.v; [...$(id).children].forEach(x => x.classList.toggle('on', x === b)); renderBoard(); }); }
+seg('#scopeSeg', 'scope'); seg('#deptSeg', 'dept');
+$('#personSel').onchange = e => { state.filter.person = e.target.value; renderBoard(); };
+$('#searchIn').oninput = e => { state.filter.q = e.target.value; renderBoard(); };
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') return closeModal(); const b = e.target.closest('[data-act]'); if (b) act(b); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && state.key && !$('#board').classList.contains('hidden')) load(true); });
+setInterval(() => { if (!document.hidden && state.key && $('#modal').classList.contains('hidden')) load(true); }, 120000);
+
+/* ============ DEMO DATA ============ */
+let demoDB = null;
+function demoApi(action, d) {
+  return new Promise((resolve, reject) => setTimeout(() => {
+    if (!demoDB) {
+      const people = ['Dave Petlansky','Frank Dean','Henry Fischer','Jake Shanas','Joe Docter','John Funk','Kevin Avington','Mike Mertens','Nick Brooks','Phil Howard','Scott Pellizzaro','Stone Cook','Closet'];
+      const fmt = dt => `${dt.getMonth()+1}/${dt.getDate()}/${dt.getFullYear()}`;
+      const now = new Date(); const ago = n => new Date(now - n*DAY);
+      const streets = ['370 Allen Drive, Florissant, MO 63033','5425 Odell Street, St. Louis, MO 63139','10440 Willowdale Drive, St. Louis, MO 63146','231 Laurelwood Drive, St. Peters, MO 63376','69 East Homefield Point Court, O\'Fallon, MO 63366','6116 Kennerly Place Dr., St. Louis MO 63128','649 Rifle Ridge Dr, Wentzville, MO 63385','5535 Seagrove Court, St. Louis, MO 63129'];
+      const ids = [...Array(60)].map((_,i)=>String(i+1)).concat(['S1','S2','S3','S4','S5','S6','S7']);
+      let si = 0;
+      const mons = ids.map((id, i) => {
+        const r = (i*37)%10;
+        let status = r<3?'Deployed':r<6?'Vehicle':r<8?'Office':r<9?'Calibration':'Vehicle';
+        if (id==='38') status='Missing';
+        const person = status==='Office'||status==='Calibration'||status==='Missing' ? 'Closet' : people[i%12];
+        const m = { id, status, location: person, address:'', startDate:'', dropTime:'', endDate:'', pickTime:'', average:'', result:'', calDate: fmt(new Date(now.getTime() + ((i*53)%420 - 20)*DAY)), timestamp:'', notes: id==='38'?'Missing':id==='14'?'Wrong type power cord':'' };
+        if (status==='Deployed') {
+          const s = ago(i%3); const e = new Date(s.getTime()+2*DAY);
+          Object.assign(m, { address: streets[si++%streets.length], startDate: fmt(s), dropTime:'10:00 AM', endDate: fmt(e), pickTime:'10:00 AM' });
+          if (i%3===2) { m.average = (i%7*0.7+0.4).toFixed(1); m.result = +m.average>=4?'Fail':'Pass'; }
+        }
+        return m;
+      });
+      demoDB = { people, mons };
+    }
+    const m = demoDB.mons.find(x => x.id === d.monitor);
+    const fmt = dt => `${String(dt.getMonth()+1).padStart(2,'0')}/${String(dt.getDate()).padStart(2,'0')}/${dt.getFullYear()}`;
+    const stamp = () => m && (m.timestamp = new Date().toLocaleString());
+    switch (action) {
+      case 'list': return resolve({ ok:true, monitors: JSON.parse(JSON.stringify(demoDB.mons)), people: demoDB.people, failLevel: 4 });
+      case 'deploy': { const n = new Date(); const e = new Date(n.getTime()+2*DAY); Object.assign(m, { status:'Deployed', address:d.address, location:d.person, startDate:fmt(n), dropTime:'10:00 AM', endDate:fmt(e), pickTime:'10:00 AM' }); stamp(); break; }
+      case 'average': m.average = String(parseFloat(d.average)); m.result = parseFloat(d.average) >= 4 ? 'Fail' : 'Pass'; stamp(); break;
+      case 'finish': Object.assign(m, { status:'Vehicle', address:'', startDate:'', dropTime:'', endDate:'', pickTime:'', average:'', result:'' }); stamp(); break;
+      case 'transfer': m.location = d.person; if (d.person==='Closet') m.status='Office'; else if (m.status==='Office') m.status='Vehicle'; stamp(); break;
+      case 'status': m.status = d.status; if (d.status==='Office') m.location='Closet'; if (d.note !== undefined) m.notes = d.note; stamp(); break;
+      case 'edit': if (d.address!==undefined) m.address = d.address; stamp(); break;
+      case 'report': return reject(new Error('Report PDFs only work when connected to the sheet'));
+    }
+    resolve({ ok:true });
+  }, 250));
+}
+
+/* ============ START ============ */
+if (DEMO) { $('#demoBar').classList.remove('hidden'); if (!state.key) state.key = 'demo'; }
+if (state.key) { showBoard(); load().then(ok => { if (ok && !state.me) $('#meBtn').click(); }); }
+else showLogin();
+</script>
+</body>
+</html>
