@@ -189,16 +189,32 @@ const STATUS_COLOR = { Deployed:'var(--deployed)', Vehicle:'var(--vehicle)', Off
 const STATUS_ORDER = ['Deployed','Vehicle','Office','Missing','Calibration'];
 
 /* ============ API ============ */
+// Safari shows "Load failed" when a request drops (weak signal, Google waking the script up).
+// Retry automatically. Deploy and Finish are protected: if a dropped request actually went
+// through, the retry gets "already deployed" / "enter the average" back, which we treat as success.
+const DONE_ALREADY = { deploy: /already deployed/i, finish: /average before finishing/i };
 async function api(action, data = {}) {
   if (DEMO) return demoApi(action, data);
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ ...data, action, key: state.key, by: state.me })
-  });
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || 'Something went wrong');
-  return json;
+  const body = JSON.stringify({ ...data, action, key: state.key, by: state.me });
+  let dropped = false;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    let json;
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 30000);
+      const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body, signal: ctrl.signal, cache: 'no-store' });
+      clearTimeout(timer);
+      json = await res.json();
+    } catch (e) {
+      dropped = true;
+      if (attempt === 3) throw new Error('No connection — check signal and try again');
+      await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+      continue;
+    }
+    if (json.ok) return json;
+    if (dropped && DONE_ALREADY[action] && DONE_ALREADY[action].test(json.error || '')) return { ok: true };
+    throw new Error(json.error || 'Something went wrong');
+  }
 }
 
 let toastTimer;
@@ -438,9 +454,13 @@ async function sharePdf() {
 }
 
 /* ============ LOAD / LOGIN ============ */
-let loading = false;
-async function load(silent) {
-  if (loading) return; loading = true;
+let loading = null;
+function load(silent) {
+  if (loading) return loading; // already refreshing — wait for that one
+  loading = doLoad(silent);
+  return loading;
+}
+async function doLoad(silent) {
   $('#refreshIcon').classList.add('spin');
   try {
     const res = await api('list');
@@ -449,10 +469,10 @@ async function load(silent) {
     $('#hdrSub').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
     return true;
   } catch (e) {
-    if (/passcode/i.test(e.message)) { LS.del('key'); state.key = ''; showLogin(); }
-    toast(e.message, true);
+    if (/passcode/i.test(e.message)) { LS.del('key'); state.key = ''; showLogin(); toast(e.message, true); }
+    else if (!silent) toast(e.message, true); // background refreshes fail quietly and try again later
     return false;
-  } finally { loading = false; $('#refreshIcon').classList.remove('spin'); }
+  } finally { loading = null; $('#refreshIcon').classList.remove('spin'); }
 }
 
 function showLogin() {
