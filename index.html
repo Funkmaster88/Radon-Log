@@ -66,6 +66,9 @@ main{max-width:1200px;margin:0 auto;padding:14px 16px calc(40px + env(safe-area-
 .card .who{margin-left:auto;font-size:14px;font-weight:600;color:var(--navy);text-align:right}
 .card .addr{font-size:14px;margin-top:6px;color:var(--ink);min-height:1em}
 .card .meta{font-size:13px;color:var(--muted);margin-top:4px;display:flex;flex-wrap:wrap;gap:4px 10px}
+.editaddr summary{color:var(--muted);font-size:14px;font-weight:600;cursor:pointer;padding:6px 2px}
+.editaddr[open] summary{color:var(--navy)}
+.card .stamp{font-size:11px;color:#98a2b3;text-align:right;margin-top:6px}
 .flag{font-weight:700}
 .flag.danger{color:var(--danger)} .flag.warn{color:#b27800}
 .empty{color:var(--muted);text-align:center;padding:40px}
@@ -241,8 +244,14 @@ function flags(m) {
   const now = new Date();
   if (m.status === 'Deployed') {
     const due = parseDT(m.endDate, m.pickTime);
-    if (due && now > due) out.push({ k:'overdue', cls:'danger', txt:'Pickup overdue' });
-    else if (due && due - now < DAY && due.toDateString() === now.toDateString()) out.push({ k:'today', cls:'warn', txt:'Pickup today' });
+    // Grace for weekends: up to 2 days past pickup = due, 2–7 days = overdue, 7+ days = likely missing
+    if (due) {
+      const late = (now - due) / DAY;
+      if (late >= 7) out.push({ k:'lost', cls:'danger', txt:`⚠ ${Math.floor(late)} days past pickup — missing?` });
+      else if (late >= 2) out.push({ k:'overdue', cls:'danger', txt:`Overdue (${Math.floor(late)} days)` });
+      else if (late >= 0) out.push({ k:'today', cls:'warn', txt:'Ready for pickup' });
+      else if (due.toDateString() === now.toDateString()) out.push({ k:'today', cls:'warn', txt:'Pickup today' });
+    }
   }
   const cal = parseDT(m.calDate);
   if (cal) {
@@ -280,9 +289,10 @@ function renderBoard() {
   // alerts
   const cnt = k => all.filter(m => flags(m).some(x => k === 'cal' ? (x.k === 'calover' || x.k === 'calsoon') : x.k === k)).length;
   const a = [];
-  const o = cnt('overdue'), t = cnt('today'), c = cnt('cal');
-  if (o) a.push(`<button class="alert danger ${state.filter.alert==='overdue'?'on':''}" data-alert="overdue">⚠ ${o} pickup${o>1?'s':''} overdue</button>`);
-  if (t) a.push(`<button class="alert warn ${state.filter.alert==='today'?'on':''}" data-alert="today">${t} pickup${t>1?'s':''} today</button>`);
+  const l = cnt('lost'), o = cnt('overdue'), t = cnt('today'), c = cnt('cal');
+  if (l) a.push(`<button class="alert danger ${state.filter.alert==='lost'?'on':''}" data-alert="lost">⚠ ${l} possibly missing (7+ days)</button>`);
+  if (o) a.push(`<button class="alert danger ${state.filter.alert==='overdue'?'on':''}" data-alert="overdue">${o} pickup${o>1?'s':''} overdue</button>`);
+  if (t) a.push(`<button class="alert warn ${state.filter.alert==='today'?'on':''}" data-alert="today">${t} ready for pickup</button>`);
   if (c) a.push(`<button class="alert warn ${state.filter.alert==='cal'?'on':''}" data-alert="cal">${c} calibration${c>1?'s':''} due ≤30 days</button>`);
   $('#alerts').innerHTML = a.join('');
   $('#alerts').classList.toggle('hidden', !a.length);
@@ -318,7 +328,13 @@ function card(m) {
       <span class="who">${esc(m.location || '')}</span></div>
     ${m.status === 'Deployed' ? `<div class="addr">${esc(m.address)}</div>` : ''}
     <div class="meta">${meta.join(' ')}</div>
+    ${m.timestamp ? `<div class="stamp">Updated ${esc(shortStamp(m.timestamp))}</div>` : ''}
   </button>`;
+}
+// "10/16/2026 01:36:57 PM" -> "10/16 1:36 PM"
+function shortStamp(s) {
+  const x = String(s).match(/(\d{1,2})\/(\d{1,2})\/\d{2,4}[ ,]+(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?/i);
+  return x ? `${+x[1]}/${+x[2]} ${+x[3]}:${x[4]}${x[5] ? ' ' + x[5].toUpperCase() : ''}` : s;
 }
 
 /* ============ DETAIL SHEET ============ */
@@ -338,7 +354,7 @@ function openMonitor(id) {
     m.timestamp && ['Last change', m.timestamp]
   ].filter(Boolean).map(([k,v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('');
 
-  let body = '';
+  let body = '', tail = '';
   if (m.status === 'Deployed') {
     const hasAvg = m.average !== '' && m.average != null;
     body += `<div class="block steps"><h3>Finish test</h3>
@@ -359,10 +375,12 @@ function openMonitor(id) {
         <button class="btn green" style="width:100%" data-act="finish" ${hasAvg?'':'disabled'}>Finish &amp; Clear</button>
       </div></div>
     </div>
-    <div class="block"><h3>Edit address</h3>
-      <div class="row"><input class="in" id="addrEdit" value="${esc(m.address)}">
+`;
+    tail = `<details class="editaddr"><summary>Edit address</summary>
+      <div class="row" style="margin-top:8px"><input class="in" id="addrEdit" value="${esc(m.address)}">
       <button class="btn" style="flex:0 0 auto" data-act="editaddr">Save</button></div>
-    </div>`;
+      <div style="font-size:12px;color:var(--muted);margin-top:6px">Only changes the address. Dates and times stay the same.</div>
+    </details>`;
   } else {
     body += `<div class="block"><h3>Deploy this monitor</h3>
       <label class="f" for="addrIn">Property address</label>
@@ -387,7 +405,7 @@ function openMonitor(id) {
   }
   $('#sheet').innerHTML = `<h2>Monitor ${esc(m.id)} <span class="badge" style="background:${color}">${esc(m.status)}</span><button class="close" data-act="close" aria-label="Close">×</button></h2>
     <div class="sub">${isCape(m) ? 'Cape department' : 'St. Louis'}</div>
-    <dl class="kv">${kv}</dl>${body}`;
+    <dl class="kv">${kv}</dl>${body}${tail}`;
   $('#modal').classList.remove('hidden');
   $('#sheet').dataset.id = id;
   const avgIn = $('#avgIn');
@@ -439,7 +457,7 @@ async function act(el) {
   }
   if (a === 'finish') {
     const m = state.monitors.find(x => x.id === id);
-    if (!confirm(`Finish monitor ${id}?\n\n${m.address}\nAverage ${m.average} — ${m.result}\n\nThis saves to Backup and clears the row. Make sure the report is saved first.`)) return;
+    if (!confirm(`Are you sure you want to clear the Radon Results?\n\nHave you saved and uploaded your PDF?\n\nMonitor ${id} · ${m.address}\nAverage ${m.average} — ${m.result}`)) return;
     return run('Finishing…', 'finish', {});
   }
   if (a === 'editaddr') return run('Saving…', 'edit', { address: $('#addrEdit').value }, true);
@@ -561,7 +579,7 @@ function demoApi(action, d) {
         const person = status==='Office'||status==='Calibration'||status==='Missing' ? 'Closet' : people[i%12];
         const m = { id, status, location: person, address:'', startDate:'', dropTime:'', endDate:'', pickTime:'', average:'', result:'', calDate: fmt(new Date(now.getTime() + ((i*53)%420 - 20)*DAY)), timestamp:'', notes: id==='38'?'Missing':id==='14'?'Wrong type power cord':'' };
         if (status==='Deployed') {
-          const s = ago(i%3); const e = new Date(s.getTime()+2*DAY);
+          const s = ago([0,1,2,4,5,6,11][i%7]); const e = new Date(s.getTime()+2*DAY); m.timestamp = fmt(s) + ' 10:0' + (i%10) + ':00 AM';
           Object.assign(m, { address: streets[si++%streets.length], startDate: fmt(s), dropTime:'10:00 AM', endDate: fmt(e), pickTime:'10:00 AM' });
           if (i%3===2) { m.average = (i%7*0.7+0.4).toFixed(1); m.result = +m.average>=4?'Fail':'Pass'; }
         }
