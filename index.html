@@ -244,11 +244,11 @@ function flags(m) {
   const now = new Date();
   if (m.status === 'Deployed') {
     const due = parseDT(m.endDate, m.pickTime);
-    // Grace for weekends: up to 2 days past pickup = due, 2–7 days = overdue, 7+ days = likely missing
+    // Grace for weekends: up to 3 days past pickup = due, 3–7 days = overdue, 7+ days = likely missing
     if (due) {
       const late = (now - due) / DAY;
       if (late >= 7) out.push({ k:'lost', cls:'danger', txt:`⚠ ${Math.floor(late)} days past pickup — missing?` });
-      else if (late >= 2) out.push({ k:'overdue', cls:'danger', txt:`Overdue (${Math.floor(late)} days)` });
+      else if (late >= 3) out.push({ k:'overdue', cls:'danger', txt:`Overdue (${Math.floor(late)} days)` });
       else if (late >= 0) out.push({ k:'today', cls:'warn', txt:'Ready for pickup' });
       else if (due.toDateString() === now.toDateString()) out.push({ k:'today', cls:'warn', txt:'Pickup today' });
     }
