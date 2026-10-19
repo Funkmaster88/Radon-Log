@@ -448,7 +448,7 @@ async function act(el) {
     if (!res) return;
     const bytes = Uint8Array.from(atob(res.pdf), c => c.charCodeAt(0));
     const blob = new Blob([bytes], { type: 'application/pdf' });
-    state.pdf = { blob, url: URL.createObjectURL(blob), name: reportName((state.monitors.find(x => x.id === id) || {}).address) };
+    state.pdf = { blob, url: URL.createObjectURL(blob), name: 'Radon Report.pdf' };
     const canShare = navigator.canShare && navigator.canShare({ files: [new File([blob], state.pdf.name, { type: 'application/pdf' })] });
     $('#pdfRow').innerHTML = (canShare ? `<button class="btn primary" data-act="sharepdf">Share / Save PDF</button>` : '') +
       `<a class="btn" style="text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center" href="${state.pdf.url}" target="_blank">Open PDF</a>`;
